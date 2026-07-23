@@ -1,0 +1,36 @@
+
+// 100% 도면 일치 좌표 및 사무실/벽 관통 완벽 차단 노드 연결 구조
+window.SENSOR_NODES = {
+  // Top Central Hall & Corridor (Row 1)
+  "S01": { id: "S01", x: 50.8, y: 10.2, risk: 0, neighbors: ["S04", "S06", "S14"] },
+  "S02": { id: "S02", x: 13.5, y: 19.5, risk: 0, neighbors: ["S03", "S10"] },
+  "S03": { id: "S03", x: 28.2, y: 19.5, risk: 0, neighbors: ["S02", "S04"] },
+  "S04": { id: "S04", x: 42.8, y: 19.5, risk: 0, neighbors: ["S03", "S01"] },
+  "S06": { id: "S06", x: 58.8, y: 19.5, risk: 0, neighbors: ["S01", "S07"] },
+  "S07": { id: "S07", x: 73.5, y: 19.5, risk: 0, neighbors: ["S06", "S08"] },
+  "S08": { id: "S08", x: 82.8, y: 19.5, risk: 0, neighbors: ["S07", "S09"] },
+  "S09": { id: "S09", x: 92.2, y: 19.5, risk: 0, neighbors: ["S08", "S17"] },
+
+  // Outer Vertical Passages & Upper-Middle Corridor (Row 2)
+  "S10": { id: "S10", x: 3.6,  y: 29.5, risk: 0, neighbors: ["S02", "S12"] },
+  "S12": { id: "S12", x: 21.2, y: 39.5, risk: 0, neighbors: ["S10", "S13", "S18"] },
+  "S13": { id: "S13", x: 38.5, y: 39.5, risk: 0, neighbors: ["S12", "S14"] },
+  "S14": { id: "S14", x: 50.8, y: 39.5, risk: 0, neighbors: ["S13", "S15", "S01"] },
+  "S15": { id: "S15", x: 66.2, y: 39.5, risk: 0, neighbors: ["S14", "S17", "S21"] },
+  "S17": { id: "S17", x: 96.5, y: 29.5, risk: 0, neighbors: ["S09", "S15"] },
+
+  // Middle-Lower Corridor & Outer Passages (Row 3)
+  "S18": { id: "S18", x: 21.2, y: 60.5, risk: 0, neighbors: ["S12", "S19", "S23"] },
+  "S19": { id: "S19", x: 38.5, y: 60.5, risk: 0, neighbors: ["S18", "S20"] },
+  "S20": { id: "S20", x: 62.8, y: 60.5, risk: 0, neighbors: ["S19", "S21"] },
+  "S21": { id: "S21", x: 80.2, y: 60.5, risk: 0, neighbors: ["S20", "S15", "S22"] },
+  "S22": { id: "S22", x: 96.5, y: 69.8, risk: 0, neighbors: ["S21", "S26"] },
+
+  // Bottom Corridor (Row 4)
+  "S23": { id: "S23", x: 15.2, y: 80.5, risk: 0, neighbors: ["S18", "S24"] },
+  "S24": { id: "S24", x: 38.5, y: 80.5, risk: 0, neighbors: ["S23", "S25"] },
+  "S25": { id: "S25", x: 62.8, y: 80.5, risk: 0, neighbors: ["S24", "S26"] },
+  "S26": { id: "S26", x: 84.8, y: 80.5, risk: 0, neighbors: ["S25", "S22"] }
+};
+
+window.EXITS = ["S01", "S24", "S10"];
