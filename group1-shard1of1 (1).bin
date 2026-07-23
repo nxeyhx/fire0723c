@@ -1,0 +1,235 @@
+
+let myLocation = "S03";
+let fireLocation = null;
+let selectionMode = "none";
+let horizon = "0";
+let animationFrameId;
+
+document.addEventListener("DOMContentLoaded", () => {
+  initUI();
+  setupSensors();
+  updateTargetRisks();
+  startAnimationLoop();
+});
+
+function initUI() {
+  const startSelect = document.getElementById("start");
+  if (startSelect && window.SENSOR_NODES) {
+    startSelect.innerHTML = "";
+    Object.keys(window.SENSOR_NODES).forEach(id => {
+      let opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = id + " 복도";
+      if (id === myLocation) opt.selected = true;
+      startSelect.appendChild(opt);
+    });
+    
+    startSelect.addEventListener("change", (e) => {
+      myLocation = e.target.value;
+      updateTargetRisks();
+    });
+  }
+
+  const horizonSelect = document.getElementById("horizon");
+  if (horizonSelect) {
+    horizonSelect.addEventListener("change", (e) => {
+      horizon = e.target.value;
+      let text = horizon === "0" ? "현재" : horizon + "초 뒤 (미래 예측)";
+      document.getElementById("shown").textContent = text;
+      document.getElementById("mapHorizon").textContent = text;
+      
+      updateTargetRisks();
+    });
+  }
+
+  document.getElementById("selectMyLocation")?.addEventListener("click", () => {
+    selectionMode = "myLocation";
+    document.getElementById("selectionModeLabel").textContent = "📍 내 위치 선택";
+  });
+
+  document.getElementById("selectFireLocation")?.addEventListener("click", () => {
+    selectionMode = "fireLocation";
+    document.getElementById("selectionModeLabel").textContent = "🔥 발화 위치 선택";
+  });
+
+  document.getElementById("clearFireLocation")?.addEventListener("click", () => {
+    fireLocation = null;
+    selectionMode = "none";
+    document.getElementById("selectionModeLabel").textContent = "일반";
+    document.getElementById("fireSummary").textContent = "선택 안 함";
+    
+    updateTargetRisks();
+  });
+}
+
+function getRiskClass(riskValue) {
+  if (riskValue < 0.25) return "safe";
+  if (riskValue < 0.50) return "warn";
+  if (riskValue < 0.75) return "danger";
+  return "critical";
+}
+
+function setupSensors() {
+  const sensorLayer = document.getElementById("sensorLayer");
+  if (!sensorLayer || !window.SENSOR_NODES) return;
+
+  sensorLayer.innerHTML = "";
+
+  Object.keys(window.SENSOR_NODES).forEach(id => {
+    let node = window.SENSOR_NODES[id];
+    node.currentRisk = 0; // 초기 수치
+    node.targetRisk = 0;
+    
+    let el = document.createElement("div");
+    el.id = "sensor-" + id;
+    el.className = "sensor safe";
+    el.style.left = node.x + "%";
+    el.style.top = node.y + "%";
+    
+    el.innerHTML = `
+      <strong>${id.replace("S", "")}</strong>
+      <small class="risk-val">0%</small>
+    `;
+
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (selectionMode === "myLocation") {
+        myLocation = id;
+        document.getElementById("start").value = id;
+        selectionMode = "none";
+        document.getElementById("selectionModeLabel").textContent = "일반";
+      } else if (selectionMode === "fireLocation") {
+        fireLocation = id;
+        selectionMode = "none";
+        document.getElementById("selectionModeLabel").textContent = "일반";
+        document.getElementById("fireSummary").textContent = fireLocation + " 복도";
+      }
+      updateTargetRisks();
+    });
+
+    sensorLayer.appendChild(el);
+  });
+}
+
+// 발화 지점 및 시간에 따른 목표 위험도 재계산
+function updateTargetRisks() {
+  let seconds = parseInt(horizon);
+  let spreadMultiplier = 1.0 + (seconds / 10.0) * 1.5;
+
+  Object.keys(window.SENSOR_NODES).forEach(id => {
+    let node = window.SENSOR_NODES[id];
+    
+    if (!fireLocation) {
+      node.targetRisk = 0;
+    } else {
+      const fireNode = window.SENSOR_NODES[fireLocation];
+      let dist = Math.hypot(node.x - fireNode.x, node.y - fireNode.y);
+
+      let criticalRadius = 8.0 * spreadMultiplier;
+      let dangerRadius = 20.0 * spreadMultiplier;
+      let warnRadius = 35.0 * spreadMultiplier;
+
+      if (dist <= criticalRadius) {
+        node.targetRisk = 0.95; // 95% 
+      } else if (dist <= dangerRadius) {
+        node.targetRisk = 0.65; // 65%
+      } else if (dist <= warnRadius) {
+        node.targetRisk = 0.35; // 35%
+      } else {
+        node.targetRisk = 0.05; // 5%
+      }
+    }
+  });
+
+  // 즉시 A* 경로 업데이트 (목표 위험도 기준)
+  updatePathDisplay();
+}
+
+// 실시간 수치 변화 애니메이션 루프
+function startAnimationLoop() {
+  function animate() {
+    let needsRender = false;
+    
+    Object.keys(window.SENSOR_NODES).forEach(id => {
+      let node = window.SENSOR_NODES[id];
+      let diff = node.targetRisk - node.currentRisk;
+      
+      if (Math.abs(diff) > 0.005) {
+        // 부드럽게 실시간 수치 증가/감소
+        node.currentRisk += diff * 0.08; 
+        needsRender = true;
+      } else {
+        node.currentRisk = node.targetRisk;
+      }
+      
+      let el = document.getElementById("sensor-" + id);
+      if (el) {
+        el.className = `sensor ${getRiskClass(node.currentRisk)}`;
+        let percent = Math.round(node.currentRisk * 100);
+        el.querySelector('.risk-val').textContent = percent + '%';
+      }
+    });
+
+    animationFrameId = requestAnimationFrame(animate);
+  }
+  
+  animate();
+}
+
+function updatePathDisplay() {
+  renderMarkers();
+  
+  if (!window.SENSOR_NODES || !window.EXITS) return;
+
+  // A* 탐색은 targetRisk를 기반으로 수행하여 최적 대피로 확보
+  const result = runAStar(myLocation, window.EXITS, window.SENSOR_NODES, fireLocation);
+  
+  const exitSummary = document.getElementById("exit");
+  const routeSummary = document.getElementById("route");
+  const pathSvg = document.getElementById("pathLayer");
+
+  if (result && result.path && pathSvg) {
+    if (exitSummary) {
+      let exitName = result.exitId === "S01" ? "출구 1" : (result.exitId === "S24" ? "출구 2" : "출구 3");
+      exitSummary.textContent = `${exitName} (${result.exitId})`;
+    }
+    if (routeSummary) routeSummary.textContent = result.path.join(" ➔ ");
+
+    let points = result.path.map(id => {
+      let n = window.SENSOR_NODES[id];
+      return `${n.x},${n.y}`;
+    }).join(" ");
+
+    pathSvg.innerHTML = `<polyline points="${points}" fill="none" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+  } else {
+    if (exitSummary) exitSummary.textContent = "대피 불가";
+    if (routeSummary) routeSummary.textContent = "안전 경로 없음";
+    if (pathSvg) pathSvg.innerHTML = "";
+  }
+}
+
+function renderMarkers() {
+  const markerLayer = document.getElementById("specialMarkerLayer");
+  if (!markerLayer) return;
+  markerLayer.innerHTML = "";
+
+  if (myLocation && window.SENSOR_NODES[myLocation]) {
+    let node = window.SENSOR_NODES[myLocation];
+    let myEl = document.createElement("div");
+    myEl.className = "marker myLocation";
+    myEl.style.left = node.x + "%";
+    myEl.style.top = (node.y - 4.5) + "%";
+    myEl.innerHTML = "📍";
+    markerLayer.appendChild(myEl);
+  }
+
+  if (fireLocation && window.SENSOR_NODES[fireLocation]) {
+    let fireNode = window.SENSOR_NODES[fireLocation];
+    let fireEl = document.createElement("div");
+    fireEl.className = "marker fireLocation";
+    fireEl.style.left = fireNode.x + "%";
+    fireEl.style.top = (fireNode.y - 4.5) + "%";
+    fireEl.innerHTML = "🔥";
+    markerLayer.appendChild(fireEl);
+  }
+}
